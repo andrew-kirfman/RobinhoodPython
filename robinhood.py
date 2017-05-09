@@ -108,6 +108,7 @@ class RobinhoodInstance:
     def reset_password(self, new_password):
         pass
 
+
     # ------------------------------------------------------------------------- #
     # Get Fundamentals                                                          #
     # ------------------------------------------------------------------------- #
@@ -229,6 +230,37 @@ class RobinhoodInstance:
     # ------------------------------------------------------------------------- #
 
     @staticmethod
+    def get_all_instruments():
+        """
+        Return a JSON object containing every single publicly traded stock.
+        """
+
+        json_result = None
+        out = check_output('curl -v https://api.robinhood.com/instruments/ \
+                -H "Accept: application/json"', shell=True)
+
+        next_object = json.loads(out)
+        stocks_list = next_object["results"]
+
+        while True:
+            if "unicode" not in str(type(next_object["next"])):
+                break
+
+            out = check_output('curl -v %s\
+                    -H "Accept: application/json"' % next_object["next"], shell=True)
+
+            next_object = json.loads(out)
+            stocks_list = stocks_list + next_object["results"]
+
+        with open("stock_json.txt", "w") as outfile:
+            json.dump(stocks_list, outfile)
+
+        with open("stock_list.txt", "w") as outfile:
+            for stock in stocks_list:
+                outfile.write("%s\n" % stock["symbol"])
+
+
+    @staticmethod
     def get_instrument_id(ticker_symbol):
         """
         Orders require the instrument ID for the chosen security from the robinhood API.
@@ -289,5 +321,7 @@ class RobinhoodInstance:
 if __name__ == "__main__":
 
     A = RobinhoodInstance()
+
+    A.get_all_instruments()
 
     import code; code.interact(local=locals())
