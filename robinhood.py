@@ -16,6 +16,8 @@ import json
 import logging
 import sys
 import os
+import requests
+import getpass
 
 # ----------------------------------------------------------------------------- #
 # Logging Utility                                                               #
@@ -39,6 +41,79 @@ print_logger.addHandler(print_console_handler)
 #    print_logger.addHandler(print_file_handler)
 
 # ----------------------------------------------------------------------------- #
+# Defines                                                                       #
+# ----------------------------------------------------------------------------- #
+
+# URLs to the robinhood API
+API_URLS = {
+        'login'             : 'https://api.robinhood.com/api-token-auth/',
+        'logout'            : 'https://api.robinhood.com/api-token-logout/',
+        'reset-password'    : 'https://api.robinhood.com/password_reset/request/',
+
+        'user-info'         : 'https://api.robinhood.com/user/',
+        'basic-info'        : 'https://api.robinhood.com/user/basic_info/'
+
+
+        }
+
+# Paths to configuration files
+CONFIGURATION_DIRECTORY_PATH = "./configuration"
+LOGIN_CONFIGURATION_FILE = "%s/credentials.txt" % CONFIGURATION_DIRECTORY_PATH
+
+# Account Information Parameters
+GET_ALL = "all"
+GET_USERNAME = "username"
+GET_FIRST_NAME = "first_name"
+GET_LAST_NAME = "last_name"
+GET_ID_INFO = "id_info"
+GET_URL = "url"
+GET_BASIC_INFO = "basic_info"
+GET_EMAIL = "email"
+GET_INVESTMENT_PROFILE = "investment_profile"
+GET_ID = "id"
+GET_INTERNATIONAL_INFO = "international_info"
+GET_EMPLOYMENT = "employment"
+GET_ADDITIONAL_INFO = "additional_info"
+
+# User Basic Info
+GET_ADDRESS = "address"
+GET_CITIZENSHIP = "citizenship"
+GET_CITY = "city"
+GET_COUNTRY_OF_RESIDENCE = "country_of_residence"
+GET_DATE_OF_BIRTH = "date_of_birth"
+GET_MARITAL_STATUS = "marital_status"
+GET_NUMBER_OF_DEPENDANTS = "number_dependents"
+GET_PHONE_NUMBER = "phone_number"
+GET_STATE = "state"
+GET_TAX_ID_SSN = "tax_id_ssn"
+GET_UPDATED_AT = "updated_at"
+GET_ZIPCODE = "zipcode"
+
+# ----------------------------------------------------------------------------- #
+# Build Directory Structure
+# ----------------------------------------------------------------------------- #
+
+# Users have the option of using a configuration file to store their username
+# and password.  Create that directory now.
+
+
+
+
+#try:
+#    os.exists(CONFIGURATION_DIRECTORY_PATH)
+
+
+
+# ----------------------------------------------------------------------------- #
+# Exception Handling                                                            #
+# ----------------------------------------------------------------------------- #
+
+class NotLoggedIn(Exception):
+    pass
+
+class BadArgument(Exception):
+
+# ----------------------------------------------------------------------------- #
 # RobinhoodInstance Class                                                       #
 # ----------------------------------------------------------------------------- #
 
@@ -47,14 +122,20 @@ class RobinhoodInstance:
         self.logged_in = False
         self.login_token = ""
 
+        self.username = None
+        self.password = None
+
+        self.login_session = None
+
+
     # ------------------------------------------------------------------------- #
     # Login/Authentication Functions                                            #
     # ------------------------------------------------------------------------- #
 
-    # Note: Yes, I get that it's pretty bad to store passwords in plain text.  For now,
-    # I'd like to be able to login automatically without having to type my password in
-    # every time.  I'll try to figure out a non-lazy solution later.
-    def login(self, username, password):
+    def is_logged_in(self):
+        return not (self.login_session is None or self.login_token is None)
+
+    def login(self):
         """
         Attempt to log into the Robinhood account referenced by the input
         arguments, username and password.
@@ -66,22 +147,63 @@ class RobinhoodInstance:
         and respond to commands using the retrieved token.
         """
 
-        out = check_output('curl -v https://api.robinhood.com/api-token-auth/ \
-            -H "Accept: application/json" \
-            -d "username=%s&password=%s" ' % (username, password), shell=True)
+        # See if the user has defined a file with their username and password.
+        # If not, prompt them on the command line for it.
+        data_dict = {}
 
-        token = json.loads(out)
-        if "token" in token.keys():
-            print_logger.info("[INFO]: Login for username: %s SUCCEEDED!" % username)
+        try:
+            credential_file = open(LOGIN_CONFIGURATION_FILE, "r")
 
-            self.logged_in = True
-            self.login_token = token['token']
+            username = credential_file.readline()
+            password = credential_file.readline()
 
-            return True
+            data_dict = {
+                    'username' : username,
+                    'password' : password
+                    }
+        except IOError:
+            data_dict = self.get_login_credentials()
+
+        # Create a login session that will persist through through the entire
+        # runtime of the program
+        self.login_session = requests.session()
+
+        response = self.login_session.post(API_URLS['login'], data_dict)
+        response = response.json()
+
+        # Check and see if we need to do multifactor authentication
+        if 'mfa_type' in response.keys() and 'mfa_required' in response.keys():
+            if response['mfa_required'] is True:
+                mfa_code = raw_input("Input Multifactor Identification Key: ")
+
+                data_dict.update({'mfa_code' : mfa_code})
+                response = self.login_session.post(API_URLS['login'], data_dict)
+                response = response.json()
+
+        if 'token' not in response.keys():
+            print_logger.error("[ERROR]: Login Failed!")
+            self.login_session = None
         else:
-            print_logger.error("[ERROR]: Login for username: %s FAILED!" % username)
+            self.login_token = response['token']
 
-            return False
+
+    def get_login_credentials(self):
+        """
+        Used to acquire the login credentials from the command line.
+        """
+
+        username = raw_input("Input Username: ")
+        password = getpass.getpass("Input Password: ")
+
+        data_dict = {
+                'username' : username,
+                'password' : password
+                }
+
+        return data_dict
+
+
+
 
     def logout(self):
         """
@@ -91,22 +213,30 @@ class RobinhoodInstance:
         Returns True if the logout was successfull and False otherwise for any reason.
         """
 
-        if self.logged_in is False or self.login_token == "":
-            print_logger.warning("[WARNING]: Cannot logout if you haven't logged in first!")
+        if self.login_session is None or self.login_token is None:
+            print_logger.warning("[WARNING]: Cannot logout without logging in first!")
 
-            return False
+        self.login_session.post(API_URLS['logout'])
 
-        out = check_output('curl -v https://api.robinhood.com/api-token-logout/ \
-                -H "Accept: application/json" \
-                -H "Authorization: Token %s" \
-                -d ""' % self.login_token, shell=True)
+        self.login_session = None
+        self.login_token = None
 
-        # We're now logged out.
-        self.logged_in = False
-        self.login_token = ""
 
-    def reset_password(self, new_password):
-        pass
+    def reset_password(self, new_password = ""):
+        """
+        Submit a request to reset a user's password.
+
+        The robinhood API appears to then send an email to the account associated with the
+        provided email address.  I can grab the email address from the user's account, but
+        I cannot log into the email account and read the recovery email.  (I mean, I could,
+        but that would be beyond the scope of what this function should be able to do)
+        """
+
+        if not self.is_logged_in():
+            raise NotLoggedIn()
+
+        account_email_address = self.get_email()
+
 
 
     # ------------------------------------------------------------------------- #
@@ -315,6 +445,97 @@ class RobinhoodInstance:
                 return False
 
         return False
+
+    # ------------------------------------------------------------------------- #
+    # User Information Helper Functions                                         #
+    # ------------------------------------------------------------------------- #
+
+    def get_user_data(self, param):
+        """
+        Query the API for all data associated with the logged in user's account.
+
+        Returns the json data associated with user account info.
+
+        The following macros can be passed as param to retrieve.
+          - GET_ALL: Returns the whole json dump containing all user data.
+          - GET_FIRST_NAME: Returns the first name of the logged in user.
+          - GET_LAST_NAME: Returns the last name of the logged in user.
+          - GET_ID_INFO: TODO: FILL IN
+          - GET_URL: TODO: FILL IN
+          - GET_BASIC_INFO: TODO: FILL IN
+          - GET_EMAIL: Returns the email address associated with the logged in user
+          - GET_INVESTMENT_PROFILE: TODO: FILL IN
+          - GET_ID: Returns the unique ID that Robinhood uses to identify this account
+          - GET_INTERNATIONAL_INFO: TODO: FILL IN
+          - GET_EMPLOYMENT: Link to employment info associated with the account
+          - GET_ADDITIONAL_INFO: Returns a link to any additional information associated with the logged in user
+        """
+
+        if not self.is_logged_in():
+            raise NotLoggedIn()
+
+        # Making an API call here with post was rejected by the API server.  Curl
+        # should work where post failed.
+        response = check_output('curl -v %s \
+                -H "Accept: application/json" \
+                -H "Authorization: Token %s"' % (API_URLS['user-info'], self.login_token), shell=True)
+
+        # The result returned by curl is a string.  Cast this to a json dict
+        response = json.loads(response)
+
+        if param == GET_ALL:
+            return response
+        elif param in response.keys():
+            return response[param]
+        else:
+            raise BadArgument()
+
+    def get_basic_user_info(self, param):
+        """
+        Query the api to gather all personal data associated with the logged in user.
+
+        The following macros can be passed as param to retrieve.
+          - GET_ALL: Returns the whole json dump containing all user data.
+          - GET_ADDRESS: Returns the user's street address.
+          - GET_CITY: Returns the user's city
+          - GET_COUNTRY_OF_RESIDENCE: Returns the user's two letter country code.
+          - GET_DATE_OF_BIRTH: Returns the user's date of birth.
+          - GET_MARITAL_STATUS: Returns whether or not the user is married or single.
+          - GET_NUMBER_DEPENDENTS: Returns the number of children that the user has.
+          - GET_PHONE_NUMBER: Returns the user's phone number.
+          - GET_STATE: Returns the user's resident state (as two character abbreviation).
+          - GET_TAX_ID_SSN: Returns the last 4 digits of the user's social.
+          - GET_UPDATED_AT: Returns the last date/time when this information was updated.
+          - GET_ZIPCODE: Returns the user's zipcode.
+        """
+
+        if not self.is_logged_in():
+            return NotLoggedIn()
+
+        response = check_output('curl -v %s \
+                -H "Accept: application/json" \
+                -H "Authorization: Token %s"' % (API_URLS['basic-info'], self.login_token), shell=True)
+
+        response = json.loads(response)
+
+        if param == GET_ALL:
+            return response
+        elif param in response.keys():
+            return response[param]
+        elif:
+            raise BadArgument()
+
+    def get_affiliation_information(self, param):
+        """
+        Get user information associated with SEC Rule 405.
+
+        TODO: This function.  This information isn't super useful, so I'm not going to do it now.
+        """
+
+        pass
+
+
+
 
 
 
