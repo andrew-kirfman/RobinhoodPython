@@ -46,12 +46,14 @@ print_logger.addHandler(print_console_handler)
 
 # URLs to the robinhood API
 API_URLS = {
-        'login'             : 'https://api.robinhood.com/api-token-auth/',
-        'logout'            : 'https://api.robinhood.com/api-token-logout/',
-        'reset-password'    : 'https://api.robinhood.com/password_reset/request/',
+        'login'                 : 'https://api.robinhood.com/api-token-auth/',
+        'logout'                : 'https://api.robinhood.com/api-token-logout/',
+        'reset-password'        : 'https://api.robinhood.com/password_reset/request/',
 
-        'user-info'         : 'https://api.robinhood.com/user/',
-        'basic-info'        : 'https://api.robinhood.com/user/basic_info/'
+        'user-info'             : 'https://api.robinhood.com/user/',
+        'basic-info'            : 'https://api.robinhood.com/user/basic_info/',
+        'employent-info'        : 'https://api.robinhood.com/user/employment/'
+        'investment-profile'    : 'https://api.robinhood.com/user/investment_profile/'
 
 
         }
@@ -59,6 +61,9 @@ API_URLS = {
 # Paths to configuration files
 CONFIGURATION_DIRECTORY_PATH = "./configuration"
 LOGIN_CONFIGURATION_FILE = "%s/credentials.txt" % CONFIGURATION_DIRECTORY_PATH
+
+# Account Data
+
 
 # Account Information Parameters
 GET_ALL = "all"
@@ -88,6 +93,33 @@ GET_STATE = "state"
 GET_TAX_ID_SSN = "tax_id_ssn"
 GET_UPDATED_AT = "updated_at"
 GET_ZIPCODE = "zipcode"
+
+# Employment Data
+GET_EMPLOYER_ADDRESS = "employer_address"
+GET_EMPLOYER_CITY = "employer_city"
+GET_EMPLOYER_NAME = "employer_name"
+GET_EMPLOYER_STATE = "employer_state"
+GET_EMPLOYER_ZIPCODE = "employer_zipcode"
+GET_EMPLOYMENT_STATUS = "employment_status"
+GET_OCCUPATION = "occupation"
+GET_UPDATED_AT = "updated_at"
+GET_USER = "user"
+GET_YEARS_EMPLOYED = "years_enployed"
+
+# Investing Experience Data
+GET_ANNUAL_INCOME = "annual_income"
+GET_INVESTING_EXPERIENCE = "investment_experience"
+GET_INVESTMENT_OBJECTIVE = "investment_objective"
+GET_LIQUID_NET_WORTH = "liquid_net_worth"
+GET_LIQUIDITY_NEEDS = "liquidity_needs"
+GET_RISK_TOLERANCE = "risk_tolerance"
+GET_SOURCE_OF_FUNDS = "source_of_funds"
+GET_SUITABILITY_VERIFIED = "suitability_verified"
+GET_TAX_BRACKET = "tax_bracket"
+GET_TIME_HORIZON = "time_horizon"
+GET_TOTAL_NET_WORTH = "total_net_worth"
+GET_UPDATED_AT = "updated_at"
+GET_USER = "user"
 
 # ----------------------------------------------------------------------------- #
 # Build Directory Structure
@@ -360,7 +392,7 @@ class RobinhoodInstance:
     # ------------------------------------------------------------------------- #
 
     @staticmethod
-    def get_all_instruments():
+    def get_all_instruments(output_file = "stock_list.txt"):
         """
         Return a JSON object containing every single publicly traded stock.
         """
@@ -382,10 +414,10 @@ class RobinhoodInstance:
             next_object = json.loads(out)
             stocks_list = stocks_list + next_object["results"]
 
-        with open("stock_json.txt", "w") as outfile:
+        with open(output_file.replace(".txt", ".json"), "w") as outfile:
             json.dump(stocks_list, outfile)
 
-        with open("stock_list.txt", "w") as outfile:
+        with open(output_file, "w") as outfile:
             for stock in stocks_list:
                 outfile.write("%s\n" % stock["symbol"])
 
@@ -418,6 +450,9 @@ class RobinhoodInstance:
     # ------------------------------------------------------------------------- #
     # Account Helper Functions                                                  #
     # ------------------------------------------------------------------------- #
+
+    def get_account_data(self, param):
+        pass
 
     def get_account_number(self):
         """
@@ -522,7 +557,7 @@ class RobinhoodInstance:
             return response
         elif param in response.keys():
             return response[param]
-        elif:
+        else:
             raise BadArgument()
 
     def get_affiliation_information(self, param):
@@ -534,8 +569,73 @@ class RobinhoodInstance:
 
         pass
 
+    def get_employment_data(self, param):
+        """
+        Get information related to the user's employment.
 
+        The following macros can be passed as param to retrieve.
+          - GET_EMPLOYER_ADDRESS: Address of user's place of work.
+          - GET_EMPLOYER_NAME: Name of user's employer.
+          - GET_EMPLOYER_STATE: State that user's employer resides in.
+          - GET_EMPLOYER_ZIPCODE: Zipcode that user's employer resides in.
+          - GET_EMPLOYMENT_STATUS: <TODO: Not sure what this is>
+          - GET_OCUPATION: <TODO: Fill this in>
+          - GET_UPDATED_AT: Returns the last date/time when this information was updated.
+          - GET_USER: Link back to user data
+          - GET_YEARS_EMPLOYED: Self explanitory.
+        """
 
+        if not self.is_logged_in():
+            raise NotLoggedIn()
+
+        response = check_output('curl -v %s \
+                -H "Accept: application/json" \
+                -H "Authorization: Token %s"' % (API_URLS['employment-info'], self.login_token))
+
+        response = json.loads(response)
+
+        if param == GET_ALL:
+            return response
+        elif param in response.keys():
+            return response[param]
+        else:
+            raise BadArgument()
+
+    def get_investment_profile_data(self, param):
+        """
+        Get answers to the investing experience survey that users take upon registration.
+
+        The following macros can be passed as param to retrieve.
+          - GET_ANNUAL_INCOME: Annual income of the logged in user.
+          - GET_INVESTMENT_EXPERIENCE: How much experience does the logged in user have.
+          - GET_INVESTMENT_OBJECTIVE: What does the logged in user want to do with their money.
+          - GET_LIQUID_NET_WORTH: What is the net worth of the logged in user.
+          - GET_LIQUIDITY_NEEDS: How liquid is the logged in user's money.
+          - GET_RISK_TOLERANCE: How much risk can the logged in user tolerate.
+          - GET_SOURCE_OF_FUNDS: Where does the logged in user's money come from.
+          - GET_SUITABILITY_VERIFIED: <TODO: Don't know what this is>.
+          - GET_TAX_BRACKET: Get the logged in user's tax bracket.
+          - GET_TIME_HORIZON: Get the time frame that the user plans to need their money.
+          - GET_TOTAL_NET_WORTH: Get the logged in user's net worth.
+          - GET_UPDATED_AT: Returns the last date/time when this information was updated.
+          - GET_USER: Link back to user data.
+        """
+
+        if not self.is_logged_in():
+            raise NotLoggedIn()
+
+        response = check_output('curl -v %s \
+                -H "Accept: application/json" \
+                -H "Authorization: Token %s"' % (API_URLS['investment-profile'], self.login_token))
+
+        response = json.loads(response)
+
+        if param == GET_ALL:
+            return response
+        elif param in response.keys():
+            return response[param]
+        else:
+            raise BadArgument()
 
 
 
