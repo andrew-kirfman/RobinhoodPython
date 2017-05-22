@@ -50,9 +50,11 @@ API_URLS = {
         'logout'                : 'https://api.robinhood.com/api-token-logout/',
         'reset-password'        : 'https://api.robinhood.com/password_reset/request/',
 
+        'accounts'              : 'https://api.robinhood.com/accounts/',
+
         'user-info'             : 'https://api.robinhood.com/user/',
         'basic-info'            : 'https://api.robinhood.com/user/basic_info/',
-        'employent-info'        : 'https://api.robinhood.com/user/employment/'
+        'employent-info'        : 'https://api.robinhood.com/user/employment/',
         'investment-profile'    : 'https://api.robinhood.com/user/investment_profile/'
 
 
@@ -62,10 +64,8 @@ API_URLS = {
 CONFIGURATION_DIRECTORY_PATH = "./configuration"
 LOGIN_CONFIGURATION_FILE = "%s/credentials.txt" % CONFIGURATION_DIRECTORY_PATH
 
-# Account Data
 
-
-# Account Information Parameters
+# User account Information Parameters
 GET_ALL = "all"
 GET_USERNAME = "username"
 GET_FIRST_NAME = "first_name"
@@ -79,6 +79,34 @@ GET_ID = "id"
 GET_INTERNATIONAL_INFO = "international_info"
 GET_EMPLOYMENT = "employment"
 GET_ADDITIONAL_INFO = "additional_info"
+
+
+# Robinhood account information parameters
+GET_DEACTIVATED = "deactivated"
+GET_UPDATED_AT = "updated_at"
+GET_MARGIN_BALANCES = "margin_balances"
+GET_PORTFOLIO = "portfolio"
+GET_CASH_BALANCES = "cash_balances"
+GET_WITHDRAWL_HALTED = "withdrawl_halted"
+GET_CASH_AVAILABLE_FOR_WITHDRAWAL = "cash_available_for_withdrawal"
+GET_TYPE = "type"
+GET_SMA = "sma"
+GET_SWEEP_ENABLED = "sweep_enabled"
+GET_DEPOSIT_HALTED = "deposit_halted"
+GET_BUYING_POWER = "buying_power"
+GET_USER = "user"
+GET_MAX_ACH_EARLY_ACCESS_AMOUNT = "max_ach_early_access_amount"
+GET_CASH_HELD_FOR_ORDERS = "cash_held_for_orders"
+GET_ONLY_POSITION_CLOSING_TRADES = "only_position_closing_trades"
+GET_URL = "url"
+GET_POSITIONS = "positions"
+GET_CREATED_AT = "created_at"
+GET_CASH = "cash"
+GET_SMA_HELD_FOR_ORDERS = "sma_held_for_orders"
+GET_ACCOUNT_NUMBER = "account_number"
+GET_UNCLEARED_DEPOSITS = "uncleared_deposits"
+GET_UNSETTLED_FUNDS = "unsettled_funds"
+
 
 # User Basic Info
 GET_ADDRESS = "address"
@@ -94,6 +122,7 @@ GET_TAX_ID_SSN = "tax_id_ssn"
 GET_UPDATED_AT = "updated_at"
 GET_ZIPCODE = "zipcode"
 
+
 # Employment Data
 GET_EMPLOYER_ADDRESS = "employer_address"
 GET_EMPLOYER_CITY = "employer_city"
@@ -105,6 +134,7 @@ GET_OCCUPATION = "occupation"
 GET_UPDATED_AT = "updated_at"
 GET_USER = "user"
 GET_YEARS_EMPLOYED = "years_enployed"
+
 
 # Investing Experience Data
 GET_ANNUAL_INCOME = "annual_income"
@@ -120,6 +150,7 @@ GET_TIME_HORIZON = "time_horizon"
 GET_TOTAL_NET_WORTH = "total_net_worth"
 GET_UPDATED_AT = "updated_at"
 GET_USER = "user"
+
 
 # ----------------------------------------------------------------------------- #
 # Build Directory Structure
@@ -144,6 +175,7 @@ class NotLoggedIn(Exception):
     pass
 
 class BadArgument(Exception):
+    pass
 
 # ----------------------------------------------------------------------------- #
 # RobinhoodInstance Class                                                       #
@@ -301,7 +333,7 @@ class RobinhoodInstance:
 
         # Get relevant data to submit the order
         instrument_id = RobinhoodInstance.get_instrument_id(ticker_symbol)
-        account_number = self.get_account_number()
+        account_number = self.get_account_data(GET_ACCOUNT_NUMBER)
 
         out = check_output('curl -v https://api.robinhood.com/orders/ \
                 -H "Accept: application/json" \
@@ -352,7 +384,7 @@ class RobinhoodInstance:
 
         # Get relevant data to submit the order
         instrument_id = RobinhoodInstance.get_instrument_id(ticker_symbol)
-        account_number = self.get_account_number()
+        account_number = self.get_account_data(GET_ACCOUNT_NUMBER)
 
         out = check_output('curl -v https://api.robinhood.com/orders/ \
                 -H "Accept: application/json" \
@@ -452,7 +484,95 @@ class RobinhoodInstance:
     # ------------------------------------------------------------------------- #
 
     def get_account_data(self, param):
-        pass
+        """
+        Retruns parameters of the account that is logged in.  
+        
+        The following arguments can be passed as param to retrieve.
+          - GET_ALL: Returns the whole json dump from this function.  
+          - GET_DEACTIVATED: Whether or not the account has been deactivated
+          - GET_UPDATED_AT: The last time the account was modified
+          - GET_MARGIN_BALANCES: Returns the json dict corresponding to the parameters
+            of a margin account.  Returns null if the account is a cash account 
+            (i.e. not a gold or instant account).  This dict has the following parameters:
+              * day_trade_buying_power
+              * created_at
+              * overnight_buying_power_held_for_orders
+              * marked_pattern_day_trader_date
+              * cash
+              * unallocated_margin_cash
+              * updated_at
+              * cash_available_for_withdrawal
+              * margin_limit
+              * overnight_buying_power
+              * uncleared_deposits
+              * unsettled_funds
+              * day_trade_ratio
+              * overnight_ratio
+          - GET_CASH_BALANCES: Returns the json dict corresponding to the parameters of a
+            cash based account.  Returns null if the account is a margin account.  The 
+            dict has the following parameters:
+              * cash_held_for_orders
+              * created_at
+              * cash
+              * buying_power
+              * updated_at
+              * cash_available_for_withdrawl
+              * uncleared_deposits
+              * unsettled_funds
+          - GET_PORTFOLIO: A link that leads to the account's portfolio.  
+          - WITHDRAWL_HALTED: Has the most recent attempt to withdraw cash been stopped
+            for some reason?
+          - GET_CASH_AVAILABLE_FOR_WITHDRAWAL: Amount of money in Robinhood that you can
+            immediately withdraw back to your bank account.  
+          - GET_TYPE: Either "cash" for regular accounts or "margin" for instant/gold accounts
+          - GET_SMA: <TODO: Don't really know what this means.>  Something about special 
+            memorandum account funds available.  This should be null for cash accounts
+          - GET_SWEEP_ENABLED: <TODO: No idea what this is...  The github repo for the 
+            robinhood API doesn't know either>
+          - GET_DEPOSIT_HALTED: <TODO: Don't know what this is>
+          - GET_BUYING_POWER: Amount of cash available to purchase securities (up to your
+            margin limit).  On a cash account, this is equal to the amount of settled funds.  
+          - GET_USER: Link back to the basic user endpoint.  
+          - GET_MAX_ACH_EARLY_ACCESS_AMOUNT: Amount of cash you may use before actual 
+            transfer completes.  Instant accounts have early access to certain amount of
+            funds, also this also applies to the first $1,000 worth of deposits into the 
+            account
+          - GET_CASH_HELD_FOR_ORDERS: Amount of cash in outstanding buy orders.  
+          - GET_ONLY_POSITION_CLOSING_TRADES: <TODO: Don't know what this is>
+          - GET_URL: Endpoint where more information about this account may be grabbed.  
+          - GET_POSITIONS: Endpoint where you may grab the past/current positions held
+            by this account.  
+          - GET_CREATED_AT: Date that this account was created.  
+          - GET_CASH: Amount of cash including unsettled funds.  
+          - GET_SMA_HELD_FOR_ORDERS: Special memorandum account funds held for orders.  
+            This value is null for cash accounts.  
+          - GET_ACCOUNT_NUMBER: The alphanumeric string that Robinhood uses to identify
+            this account
+          - GET_UNCLEARED_DEPOSITS: Amount of money in incomplete deposits.  
+          - GET_UNSETTLED_FUNDS: Amount of money in unsettled funds.  
+        """
+
+        if not self.is_logged_in():
+            raise NotLoggedIn()
+
+        # Making an API call here with post was rejected by the API server.  Curl
+        # should work where post failed.
+        response = check_output('curl -v %s \
+                -H "Accept: application/json" \
+                -H "Authorization: Token %s"' % (API_URLS['accounts'], self.login_token), shell=True)
+
+        # The result returned by curl is a string.  Cast this to a json dict
+        
+        response = json.loads(response)["results"][0]
+
+        if param == GET_ALL:
+            return response
+        elif param in response.keys():
+            return response[param]
+        else:
+            raise BadArgument()
+        
+
 
     def get_account_number(self):
         """
@@ -637,6 +757,47 @@ class RobinhoodInstance:
         else:
             raise BadArgument()
 
+    # ------------------------------------------------------------------------- #
+    # Position Information                                                      #
+    # ------------------------------------------------------------------------- #
+
+    def get_position_history(self, active = False):
+        """
+        Returns a json dict containing all of the positions that the user has 
+        in their history.  
+        
+        The fields in this file are as follows:
+          - average_buy_price: Average price that you paid per share
+          - created_at: Assumption: The first purchase date?
+            TODO: Experiment with a cheap stock and see what happens.  
+          - instrument: The link to the instrument for the purchase.  
+          - intraday_average_buy_price: TODO: Don't know what this is.  
+          - intraday_quantity: TODO: Don't know what this is.  
+          - quantity: Assumption: The number of shares that you own.  
+          - shares_held_for_buys: TODO: Don't know what this is.
+          - shares_held_for_sells: TODO: Don't know what this is.  
+          - updated_at: The last time something was changed with this position.
+          - url: The link to this particular position.  
+        
+        If the user wants to see only positions that they currently own, set
+        active = True.  
+        """
+        
+        if not self.is_logged_in():
+            raise NotLoggedIn()
+        
+        account_id = self.get_account_data(GET_ACCOUNT_NUMBER)
+        
+        response = check_output('curl -v https://api.robinhood.com/accounts/%s/positions/ \
+                -H "Accept: application/json" \
+                -H "Authorization: Token %s"' % (account_id, self.login_token), shell=True)
+        
+        response = json.loads(response)
+        
+        if active is True:
+            return [position for position in response["results"] if float(position["quantity"]) != 0.0]
+        else:
+            return response
 
 
 if __name__ == "__main__":
