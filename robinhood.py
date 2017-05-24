@@ -50,6 +50,8 @@ API_URLS = {
         'logout'                : 'https://api.robinhood.com/api-token-logout/',
         'reset-password'        : 'https://api.robinhood.com/password_reset/request/',
 
+        'order'                 : 'https://api.robinhood.com/orders/',
+
         'accounts'              : 'https://api.robinhood.com/accounts/',
 
         'user-info'             : 'https://api.robinhood.com/user/',
@@ -249,6 +251,7 @@ class RobinhoodInstance:
             self.login_session = None
         else:
             self.login_token = response['token']
+            self.login_session.__dict__['headers'].update({'Authorization' : 'Token %s' % self.login_token})
 
 
     def get_login_credentials(self):
@@ -326,31 +329,28 @@ class RobinhoodInstance:
         the default value of $0.01 is used unless specified otherwise.
         """
 
-        # If you aren't logged in, then don't do anything.
-        if self.logged_in is False or self.login_token == "":
-            print_logger.error("[ERROR]: Cannot issue buy order without being logged in.")
-            return False
+        if not self.is_logged_in():
+            raise NotLoggedIn()
 
         # Get relevant data to submit the order
         instrument_id = RobinhoodInstance.get_instrument_id(ticker_symbol)
         account_number = self.get_account_data(GET_ACCOUNT_NUMBER)
 
-        out = check_output('curl -v https://api.robinhood.com/orders/ \
-                -H "Accept: application/json" \
-                -H "Authorization: Token %s" \
-                -d account=https://api.robinhood.com/accounts/%s/ \
-                -d instrument=https://api.robinhood.com/instruments/%s/ \
-                -d symbol=%s \
-                -d type=%s \
-                -d time_in_force=%s \
-                -d price=%s \
-                -d trigger=%s \
-                -d quantity=%s \
-                -d side=buy' % (self.login_token, account_number, instrument_id,\
-                ticker_symbol, order_type, time_in_force, price, trigger, quantity),\
-                shell=True)
-
-        buy_order_response = json.loads(out)
+        data_dict = {
+                'account'       : 'https://api.robinhood.com/accounts/%s/' % account_number,
+                'instrument'    : 'https://api.robinhood.com/instruments/%s/' % instrument_id,
+                'symbol'        : '%s' % ticker_symbol,
+                'type'          : '%s' % order_type,
+                'time_in_force' : '%s' % time_in_force,
+                'price'         : '%s' % price,
+                'trigger'       : '%s' % trigger,
+                'quantity'      : '%s' % quantity,
+                'side'          : 'buy'
+                }
+                
+        response = self.login_session.post(API_URLS['order'], data=data_dict)
+        
+        buy_order_response = json.loads(response.text)
 
         # If something went wrong with the buy order, then the response will be extremely short.
         if len(buy_order_response) < 3:
@@ -377,31 +377,28 @@ class RobinhoodInstance:
         the default value of $0.01 is used unless specified otherwise.
         """
 
-        # If you aren't logged in, then don't do anything.
-        if self.logged_in is False or self.login_token == "":
-            print_logger.error("[ERROR]: Cannot issue buy order without being logged in.")
-            return False
+        if not self.is_logged_in():
+            raise NotLoggedIn()
 
         # Get relevant data to submit the order
         instrument_id = RobinhoodInstance.get_instrument_id(ticker_symbol)
         account_number = self.get_account_data(GET_ACCOUNT_NUMBER)
 
-        out = check_output('curl -v https://api.robinhood.com/orders/ \
-                -H "Accept: application/json" \
-                -H "Authorization: Token %s" \
-                -d account=https://api.robinhood.com/accounts/%s/ \
-                -d instrument=https://api.robinhood.com/instruments/%s/ \
-                -d symbol=%s \
-                -d type=%s \
-                -d time_in_force=%s \
-                -d price=%s \
-                -d trigger=%s \
-                -d quantity=%s \
-                -d side=sell' % (self.login_token, account_number, instrument_id,\
-                ticker_symbol, order_type, time_in_force, price, trigger, quantity),\
-                shell=True)
+        data_dict = {
+                'account'       : 'https://api.robinhood.com/accounts/%s/' % account_number,
+                'instrument'    : 'https://api.robinhood.com/instruments/%s/' % instrument_id,
+                'symbol'        : '%s' % ticker_symbol,
+                'type'          : '%s' % order_type,
+                'time_in_force' : '%s' % time_in_force,
+                'price'         : '%s' % price,
+                'trigger'       : '%s' % trigger,
+                'quantity'      : '%s' % quantity,
+                'side'          : 'sell'
+                }
+                
+        response = self.login_session.post(API_URLS['order'], data=data_dict)
 
-        sell_order_response = json.loads(out)
+        sell_order_response = json.loads(response.text)
 
         # If something went wrong with the buy order, then the response will be extremely short.
         if len(sell_order_response) < 3:
