@@ -53,12 +53,12 @@ API_URLS = {
         'order'                 : 'https://api.robinhood.com/orders/',
 
         'accounts'              : 'https://api.robinhood.com/accounts/',
-
+        'instrument'            : 'https://api.robinhood.com/instruments/',
         'user-info'             : 'https://api.robinhood.com/user/',
         'basic-info'            : 'https://api.robinhood.com/user/basic_info/',
         'employent-info'        : 'https://api.robinhood.com/user/employment/',
-        'investment-profile'    : 'https://api.robinhood.com/user/investment_profile/'
-
+        'investment-profile'    : 'https://api.robinhood.com/user/investment_profile/',
+        'positions'             : 'https://api.robinhood.com/accounts/%s/positions/'
 
         }
 
@@ -269,9 +269,6 @@ class RobinhoodInstance:
 
         return data_dict
 
-
-
-
     def logout(self):
         """
         Attempt to log out of the previously logged in robinhood account.  If you haven't
@@ -424,31 +421,35 @@ class RobinhoodInstance:
     def get_all_instruments(output_file = "stock_list.txt"):
         """
         Return a JSON object containing every single publicly traded stock.
+        
+        Can choose to output to a file or just return the json dict with all of 
+        the instruments in it.  
         """
 
         json_result = None
-        out = check_output('curl -v https://api.robinhood.com/instruments/ \
-                -H "Accept: application/json"', shell=True)
+        response = requests.get(API_URLS["instrument"])
 
-        next_object = json.loads(out)
+        next_object = json.loads(response.text)
         stocks_list = next_object["results"]
 
         while True:
             if "unicode" not in str(type(next_object["next"])):
                 break
 
-            out = check_output('curl -v %s\
-                    -H "Accept: application/json"' % next_object["next"], shell=True)
+            response = requests.get(next_object["next"])
 
-            next_object = json.loads(out)
+            next_object = json.loads(response.text)
             stocks_list = stocks_list + next_object["results"]
 
-        with open(output_file.replace(".txt", ".json"), "w") as outfile:
-            json.dump(stocks_list, outfile)
+        if output_file is not None:
+            with open(output_file.replace(".txt", ".json"), "w") as outfile:
+                json.dump(stocks_list, outfile)
 
-        with open(output_file, "w") as outfile:
-            for stock in stocks_list:
-                outfile.write("%s\n" % stock["symbol"])
+            with open(output_file, "w") as outfile:
+                for stock in stocks_list:
+                    outfile.write("%s\n" % stock["symbol"])
+                    
+        return stocks_list
 
 
     @staticmethod
@@ -461,13 +462,12 @@ class RobinhoodInstance:
         this class.
         """
 
-        out = check_output('curl -v https://api.robinhood.com/instruments/?symbol=%s \
-                -H "Accept: application/json"' % ticker_symbol, shell=True)
+        response = requests.get(API_URLS["instrument"] + "?symbol=%s" % ticker_symbol)
 
         # Check to make sure that the keys that we need are in the output json.
         # I don't want any of these commands to throw exceptions because of bad data
         # and potentially kill the program.
-        instrument_data = json.loads(out)
+        instrument_data = json.loads(response.text)
 
         if "results" in instrument_data.keys():
             if "id" in instrument_data["results"][0].keys():
@@ -554,13 +554,11 @@ class RobinhoodInstance:
 
         # Making an API call here with post was rejected by the API server.  Curl
         # should work where post failed.
-        response = check_output('curl -v %s \
-                -H "Accept: application/json" \
-                -H "Authorization: Token %s"' % (API_URLS['accounts'], self.login_token), shell=True)
+        response = self.login_session.get(API_URLS['accounts'])
 
         # The result returned by curl is a string.  Cast this to a json dict
         
-        response = json.loads(response)["results"][0]
+        response = json.loads(response.text)["results"][0]
 
         if param == GET_ALL:
             return response
@@ -568,35 +566,6 @@ class RobinhoodInstance:
             return response[param]
         else:
             raise BadArgument()
-        
-
-
-    def get_account_number(self):
-        """
-        Robinhood uses a string to identify your account.  It seems like this data
-        is necessary in order to issue a buy order.  Grab this id from your login
-        token.
-        """
-
-        if self.logged_in is False or self.login_token == "":
-            print_logger.error("[ERROR]: Cannot get acount number if you aren't logged in.")
-            return False
-
-        out = check_output('curl -v https://api.robinhood.com/accounts/ \
-                -H "Accept: application/json" \
-                -H "Authorization: Token %s"' % self.login_token, shell=True)
-
-        # Based on the robinhood API github page, all accounts should share
-        # this pattern.  If this proves to not be the case, I'll change it later
-        account_data = json.loads(out)
-        if "results" in account_data.keys():
-            try:
-                return account_data["results"][0]["account_number"]
-            except NameError:
-                print_logger.error("[ERROR]: Unexpected result from get_account_number().")
-                return False
-
-        return False
 
     # ------------------------------------------------------------------------- #
     # User Information Helper Functions                                         #
@@ -628,12 +597,10 @@ class RobinhoodInstance:
 
         # Making an API call here with post was rejected by the API server.  Curl
         # should work where post failed.
-        response = check_output('curl -v %s \
-                -H "Accept: application/json" \
-                -H "Authorization: Token %s"' % (API_URLS['user-info'], self.login_token), shell=True)
+        response = self.login_session.get(API_URLS['user-info'])
 
         # The result returned by curl is a string.  Cast this to a json dict
-        response = json.loads(response)
+        response = json.loads(response.text)
 
         if param == GET_ALL:
             return response
@@ -664,11 +631,9 @@ class RobinhoodInstance:
         if not self.is_logged_in():
             return NotLoggedIn()
 
-        response = check_output('curl -v %s \
-                -H "Accept: application/json" \
-                -H "Authorization: Token %s"' % (API_URLS['basic-info'], self.login_token), shell=True)
+        response = self.login_session.get(API_URLS['basic-info'])
 
-        response = json.loads(response)
+        response = json.loads(response.text)
 
         if param == GET_ALL:
             return response
@@ -705,11 +670,9 @@ class RobinhoodInstance:
         if not self.is_logged_in():
             raise NotLoggedIn()
 
-        response = check_output('curl -v %s \
-                -H "Accept: application/json" \
-                -H "Authorization: Token %s"' % (API_URLS['employment-info'], self.login_token))
+        response = self.login_session.get(API_URLS['employment-info'])
 
-        response = json.loads(response)
+        response = json.loads(response.text)
 
         if param == GET_ALL:
             return response
@@ -741,11 +704,9 @@ class RobinhoodInstance:
         if not self.is_logged_in():
             raise NotLoggedIn()
 
-        response = check_output('curl -v %s \
-                -H "Accept: application/json" \
-                -H "Authorization: Token %s"' % (API_URLS['investment-profile'], self.login_token))
+        response = self.login_session.get(API_URLS['investment-profile'])
 
-        response = json.loads(response)
+        response = json.loads(response.text)
 
         if param == GET_ALL:
             return response
@@ -785,11 +746,9 @@ class RobinhoodInstance:
         
         account_id = self.get_account_data(GET_ACCOUNT_NUMBER)
         
-        response = check_output('curl -v https://api.robinhood.com/accounts/%s/positions/ \
-                -H "Accept: application/json" \
-                -H "Authorization: Token %s"' % (account_id, self.login_token), shell=True)
+        response = self.login_session.get(API_URLS['positions'] % account_id)
         
-        response = json.loads(response)
+        response = json.loads(response.text)
         
         if active is True:
             return [position for position in response["results"] if float(position["quantity"]) != 0.0]
