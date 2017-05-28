@@ -242,8 +242,6 @@ class RobinhoodInstance:
             else:
                 self.login_token = response['token']
                 self.login_session.__dict__['headers'].update({'Authorization' : 'Token %s' % self.login_token})
-
-            import code; code.interact(local=locals())
         else:
             # See if the user has defined a file with their username and password.
             # If not, prompt them on the command line for it.
