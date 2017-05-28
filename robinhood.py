@@ -222,6 +222,9 @@ class RobinhoodInstance:
                     'password' : password
                     }
             
+            self.username = username
+            self.password = password
+            
             self.login_session = requests.session()
 
             response = self.login_session.post(API_URLS['login'], data_dict)
@@ -239,6 +242,9 @@ class RobinhoodInstance:
             if 'token' not in response.keys():
                 print_logger.error("[ERROR]: Login Failed!")
                 self.login_session = None
+                
+                self.username = None
+                self.password = None
             else:
                 self.login_token = response['token']
                 self.login_session.__dict__['headers'].update({'Authorization' : 'Token %s' % self.login_token})
@@ -264,6 +270,9 @@ class RobinhoodInstance:
             # runtime of the program
             self.login_session = requests.session()
 
+            self.username = data_dict["username"]
+            self.password = data_dict["password"]
+
             response = self.login_session.post(API_URLS['login'], data_dict)
             response = response.json()
 
@@ -279,6 +288,9 @@ class RobinhoodInstance:
             if 'token' not in response.keys():
                 print_logger.error("[ERROR]: Login Failed!")
                 self.login_session = None
+                
+                self.username = None
+                self.password = None
             else:
                 self.login_token = response['token']
                 self.login_session.__dict__['headers'].update({'Authorization' : 'Token %s' % self.login_token})
