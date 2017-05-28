@@ -201,7 +201,7 @@ class RobinhoodInstance:
     def is_logged_in(self):
         return not (self.login_session is None or self.login_token is None)
 
-    def login(self):
+    def login(self, username=None, password=None):
         """
         Attempt to log into the Robinhood account referenced by the input
         arguments, username and password.
@@ -213,45 +213,77 @@ class RobinhoodInstance:
         and respond to commands using the retrieved token.
         """
 
-        # See if the user has defined a file with their username and password.
-        # If not, prompt them on the command line for it.
-        data_dict = {}
-
-        try:
-            credential_file = open(LOGIN_CONFIGURATION_FILE, "r")
-
-            username = credential_file.readline()
-            password = credential_file.readline()
-
+        if username is not None and password is not None:
+            # Create a login session that will persist through through the entire
+            # runtime of the program
+            
             data_dict = {
                     'username' : username,
                     'password' : password
                     }
-        except IOError:
-            data_dict = self.get_login_credentials()
+            
+            self.login_session = requests.session()
 
-        # Create a login session that will persist through through the entire
-        # runtime of the program
-        self.login_session = requests.session()
+            response = self.login_session.post(API_URLS['login'], data_dict)
+            response = response.json()
 
-        response = self.login_session.post(API_URLS['login'], data_dict)
-        response = response.json()
+            # Check and see if we need to do multifactor authentication
+            if 'mfa_type' in response.keys() and 'mfa_required' in response.keys():
+                if response['mfa_required'] is True:
+                    mfa_code = raw_input("Input Multifactor Identification Key: ")
 
-        # Check and see if we need to do multifactor authentication
-        if 'mfa_type' in response.keys() and 'mfa_required' in response.keys():
-            if response['mfa_required'] is True:
-                mfa_code = raw_input("Input Multifactor Identification Key: ")
+                    data_dict.update({'mfa_code' : mfa_code})
+                    response = self.login_session.post(API_URLS['login'], data_dict)
+                    response = response.json()
 
-                data_dict.update({'mfa_code' : mfa_code})
-                response = self.login_session.post(API_URLS['login'], data_dict)
-                response = response.json()
+            if 'token' not in response.keys():
+                print_logger.error("[ERROR]: Login Failed!")
+                self.login_session = None
+            else:
+                self.login_token = response['token']
+                self.login_session.__dict__['headers'].update({'Authorization' : 'Token %s' % self.login_token})
 
-        if 'token' not in response.keys():
-            print_logger.error("[ERROR]: Login Failed!")
-            self.login_session = None
+            import code; code.interact(local=locals())
         else:
-            self.login_token = response['token']
-            self.login_session.__dict__['headers'].update({'Authorization' : 'Token %s' % self.login_token})
+            # See if the user has defined a file with their username and password.
+            # If not, prompt them on the command line for it.
+            data_dict = {}
+
+            try:
+                credential_file = open(LOGIN_CONFIGURATION_FILE, "r")
+
+                username = credential_file.readline()
+                password = credential_file.readline()
+
+                data_dict = {
+                        'username' : username,
+                        'password' : password
+                        }
+            except IOError:
+                data_dict = self.get_login_credentials()
+
+            # Create a login session that will persist through through the entire
+            # runtime of the program
+            self.login_session = requests.session()
+
+            response = self.login_session.post(API_URLS['login'], data_dict)
+            response = response.json()
+
+            # Check and see if we need to do multifactor authentication
+            if 'mfa_type' in response.keys() and 'mfa_required' in response.keys():
+                if response['mfa_required'] is True:
+                    mfa_code = raw_input("Input Multifactor Identification Key: ")
+
+                    data_dict.update({'mfa_code' : mfa_code})
+                    response = self.login_session.post(API_URLS['login'], data_dict)
+                    response = response.json()
+
+            if 'token' not in response.keys():
+                print_logger.error("[ERROR]: Login Failed!")
+                self.login_session = None
+            else:
+                self.login_token = response['token']
+                self.login_session.__dict__['headers'].update({'Authorization' : 'Token %s' % self.login_token})
 
 
     def get_login_credentials(self):
